@@ -38,18 +38,30 @@ jobs:
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
 
+      - name: Кэш ключа подписи
+        uses: actions/cache@v4
+        with:
+          path: .keystore
+          key: riviera-keystore-v1
+
       - name: Ключ подписи
         run: |
           set -e
           KS="$SRC/android/riviera-release.keystore"
+          SAVED="$GITHUB_WORKSPACE/.keystore/riviera-release.keystore"
+          mkdir -p "$GITHUB_WORKSPACE/.keystore"
           if [ -n "${{ secrets.KEYSTORE_B64 }}" ]; then
-            echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > "$KS"
+            echo "${{ secrets.KEYSTORE_B64 }}" | base64 -d > "$SAVED"
             echo "ключ взят из секрета репозитория"
+          elif [ -s "$SAVED" ]; then
+            echo "ключ восстановлен из кэша сборки"
           else
-            keytool -genkeypair -v -keystore "$KS" -storepass riviera -keypass riviera -alias riviera -keyalg RSA -keysize 4096 -validity 10950 -dname "CN=Riviera Reader, OU=Personal, O=Riviera, C=RU"
-            base64 -w0 "$KS" > "$GITHUB_WORKSPACE/keystore.b64"
-            echo "ключ создан заново, он выложен артефактом keystore"
+            keytool -genkeypair -v -keystore "$SAVED" -storepass riviera -keypass riviera -alias riviera -keyalg RSA -keysize 4096 -validity 10950 -dname "CN=Riviera Reader, OU=Personal, O=Riviera, C=RU"
+            echo "ключа не было нигде, создан новый"
           fi
+          cp "$SAVED" "$KS"
+          base64 -w0 "$SAVED" > "$GITHUB_WORKSPACE/keystore.b64"
+          keytool -list -v -keystore "$KS" -storepass riviera | grep -E "SHA256:|Valid from" | head -2
 
       - name: Кэш зависимостей движка
         uses: actions/cache@v4
